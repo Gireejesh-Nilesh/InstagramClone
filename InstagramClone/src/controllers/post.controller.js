@@ -1,4 +1,5 @@
 const postModel = require("../models/post.model");
+const likeModel = require("../models/likes.model");
 const ImageKit = require("@imagekit/nodejs");
 const { toFile } = require("@imagekit/nodejs");
 const jwt = require("jsonwebtoken");
@@ -78,16 +79,48 @@ async function likePostController(req, res) {
     });
   }
 
-  const like = await likeModel.findCreate({
+  const existingLike = await likeModel.findOne({
+    postId,
+    username,
+  });
+
+  if (existingLike) {
+    return res.status(200).json({
+      message: "Post already liked by the user",
+      like: existingLike,
+    });
+  }
+
+  const like = await likeModel.create({
     postId,
     username,
   });
 
   res.status(200).json({
-    message: like.created
-      ? "Post liked successfully"
-      : "Post already liked by the user",
+    message: "Post liked successfully",
     like,
+  });
+}
+
+async function getFeedController(req, res) {
+  const user = req.user;
+  const allPosts = await postModel.find().populate("user").lean();
+
+  const posts = await Promise.all(
+    allPosts.map(async (post) => {
+      const isLiked = await likeModel.findOne({
+        postId: post._id,
+        username: user.username,
+      });
+
+      post.isLiked = !!isLiked;
+      return post;
+    }),
+  );
+
+  res.status(200).json({
+    message: "posts fetched successfully",
+    posts,
   });
 }
 
@@ -96,4 +129,5 @@ module.exports = {
   getPostController,
   getPostDetailsController,
   likePostController,
+  getFeedController,
 };
